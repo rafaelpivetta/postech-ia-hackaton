@@ -4,8 +4,8 @@ import numpy as np
 from PIL import Image
 import cv2
 
-#MODEL_PATH = "cutting_objects_detect_model.tflite"
-MODEL_PATH = "knife_detection_densenet.tflite"
+MODEL_PATH = "cutting_objects_detect_model.tflite"
+#MODEL_PATH = "knife_detection_densenet.tflite"
 
 def predict_webcam():
     cap = cv2.VideoCapture(0)

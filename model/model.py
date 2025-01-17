@@ -49,6 +49,7 @@ def load_data():
         target_size=(IMG_HEIGHT, IMG_WIDTH),
         batch_size=BATCH_SIZE,
         class_mode='binary',
+        classes=['no-knife', 'knife'],
         subset='training'
     )
 
@@ -59,6 +60,7 @@ def load_data():
         target_size=(IMG_HEIGHT, IMG_WIDTH),
         batch_size=BATCH_SIZE,
         class_mode='binary',
+        classes=['no-knife', 'knife'],
         subset='validation'
     )
 
@@ -70,6 +72,7 @@ def load_data():
         test_data_dir,
         target_size=(IMG_HEIGHT, IMG_WIDTH),
         batch_size=BATCH_SIZE,
+        classes=['no-knife', 'knife'],
         class_mode='binary'
     )
 
