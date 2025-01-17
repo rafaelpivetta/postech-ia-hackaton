@@ -8,7 +8,7 @@ st.set_page_config(page_title="Knife Detection", layout="wide")
 
 @st.cache_resource
 def load_model():
-    return YOLO('cutting_objects_detector_2.pt')
+    return YOLO('best.pt')
 
 try:
     model = load_model()
