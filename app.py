@@ -3,7 +3,7 @@ from ultralytics import YOLO
 import numpy as np
 from PIL import Image
 import cv2
-import torch
+#import torch
 from tempfile import NamedTemporaryFile
 import os
 from pathlib import Path
@@ -12,12 +12,14 @@ import av
 
 st.set_page_config(page_title="FIAP VisionGuard - Detector", layout="wide")
 
+model_name = 'best_Jan20_knife.pt'
+
 @st.cache_resource
 def load_model():
-    model = YOLO('best.pt')
+    model = YOLO(model_name)
     # Move model to GPU if available
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model.to(device)
+    #device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model.to('cpu')
     return model
 
 try:
