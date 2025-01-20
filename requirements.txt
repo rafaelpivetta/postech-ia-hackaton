@@ -4,12 +4,15 @@ opencv-python-headless==4.8.0.74
 numpy==1.24.3
 Pillow==9.5.0
 
-# Deep Learning
-torch==2.0.1
-torchvision==0.15.2
+# Deep Learning (with CUDA support)
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.0.1+cu118
+torchvision==0.15.2+cu118
 
 # Streamlit and its dependencies
 streamlit==1.28.0
+streamlit-webrtc==0.100.0
+av==10.0.0
 matplotlib==3.7.1
 pandas==2.0.3
 PyYAML==6.0.1
