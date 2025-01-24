@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Object Detection UI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .upload-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .preview-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .preview-box {
+            flex: 1;
+            margin: 0 10px;
+            text-align: center;
+        }
+        img, video {
+            max-width: 100%;
+            max-height: 500px;
+            margin-top: 10px;
+        }
+        .slider {
+            width: 100%;
+            margin: 20px 0;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        /* style.css */
+        .centered-alert {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 60px; /* Altura padrão */
+            color: #e0e0e0; /* Cor do texto no alerta */
+            background-color: red; /* Cor de fundo no alerta */
+            font-size: 20px; /* Tamanho da fonte */
+            font-weight: bold; /* Peso da fonte */
+            border-radius: 5px; /* Bordas arredondadas */
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); /* Sombra para realçar */
+            animation: blinker 1s linear infinite; /* Animação intermitente */
+        }
+
+        @keyframes blinker {
+            70% { opacity: 0; }
+        }
+
+        .d-none {
+            display: none;
+        }
+
+        
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Object Detection</h1>
+        
+        <div class="upload-section">
+            <h2>Upload Image or Video</h2>
+            <input type="file" id="fileInput" accept=".jpg,.jpeg,.mp4">
+            
+            <div class="slider">
+                <label for="confidence">Confidence Threshold: <span id="confidenceValue">0.25</span></label>
+                <input type="range" id="confidence" min="0" max="1" step="0.05" value="0.25">
+            </div>
+            
+            <button onclick="detectObjects()">Detect Objects</button>
+        </div>
+
+        <div class="webcam-section">
+            <h2>Or Use Webcam</h2>
+            <button id="startWebcam">Start Webcam</button>
+            <button id="stopWebcam" style="display: none;">Stop Webcam</button>
+            <div class="preview-box">
+                <video id="webcamVideo" autoplay playsinline style="display: none;"></video>
+                <canvas id="webcamCanvas" style="display: none;"></canvas>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            Processing... Please wait...
+        </div>
+        <div class="centered-alert d-none" id="alert">⚠️ ALERTA: Objeto cortante identificado! ⚠️</div>
+        <div class="preview-section">
+            <div class="preview-box">
+                <h3>Original</h3>
+                <div id="originalPreview"></div>
+            </div>
+            <div class="preview-box">
+                <h3>Detected Objects</h3>
+                <div id="resultPreview"></div>
+            </div>
+        </div>
+    </div>
+
+</body>
+<script src="static/script.js"></script>
+</html> 
