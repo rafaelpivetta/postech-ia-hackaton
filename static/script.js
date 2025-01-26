@@ -1,9 +1,16 @@
+// Add these variables at the top
+let webcamStream = null;
+let isWebcamActive = false;
+
 function showConfidenceSliderAndUploadCard() {
+    const mode = document.getElementById('detectionMode').value;
     const confidenceSlider = document.getElementById('confidenceSlider');
     const uploadCard = document.getElementById('uploadCard');
+    const webcamCard = document.getElementById('webcamCard');
     
     clearAlerts();
     clearFileInputAndPreviews();
+    stopWebcam(); // Stop webcam if running
     
     confidenceSlider.addEventListener('input', function(e) {
         document.getElementById('confidenceRangeValue').textContent = e.target.value;
@@ -17,7 +24,15 @@ function showConfidenceSliderAndUploadCard() {
         }
     });
     confidenceSlider.style.display = 'block';
-    uploadCard.style.display = 'block';
+    
+    if (mode === 'webcam') {
+        uploadCard.style.display = 'none';
+        webcamCard.style.display = 'block';
+        setupWebcam();
+    } else {
+        uploadCard.style.display = 'block';
+        webcamCard.style.display = 'none';
+    }
 
     document.getElementById('fileUpload').addEventListener('change', function(event) {
         const file = event.target.files[0];
@@ -122,5 +137,149 @@ async function detectObjects() {
         console.error('Error:', error);
         alert('Error processing the file');
     } 
+}
+
+// Add these new functions for webcam handling
+async function setupWebcam() {
+    const startButton = document.getElementById('startWebcam');
+    const stopButton = document.getElementById('stopWebcam');
+    
+    startButton.onclick = startWebcam;
+    stopButton.onclick = stopWebcam;
+}
+
+async function startWebcam() {
+    try {
+        const video = document.getElementById('webcamVideo');
+        const startButton = document.getElementById('startWebcam');
+        const stopButton = document.getElementById('stopWebcam');
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            } 
+        });
+        
+        video.srcObject = stream;
+        webcamStream = stream;
+        isWebcamActive = true;
+        
+        startButton.style.display = 'none';
+        stopButton.style.display = 'inline-block';
+        
+        // Start detection loop
+        detectWebcam();
+        
+    } catch (error) {
+        console.error('Error accessing webcam:', error);
+        alert('Erro ao acessar a webcam. Verifique as permissões.');
+    }
+}
+
+function stopWebcam() {
+    if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+        webcamStream = null;
+        isWebcamActive = false;
+        
+        const video = document.getElementById('webcamVideo');
+        video.srcObject = null;
+        
+        const startButton = document.getElementById('startWebcam');
+        const stopButton = document.getElementById('stopWebcam');
+        startButton.style.display = 'inline-block';
+        stopButton.style.display = 'none';
+    }
+}
+
+async function detectWebcam() {
+    if (!isWebcamActive) return;
+    
+    const video = document.getElementById('webcamVideo');
+    const canvas = document.getElementById('webcamCanvas');
+    const ctx = canvas.getContext('2d');
+    const gallery = document.getElementById('detectionGallery');
+    
+    // Wait for video to be ready
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        requestAnimationFrame(detectWebcam);
+        return;
+    }
+    
+    // Set canvas size to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Draw current video frame to canvas
+    ctx.drawImage(video, 0, 0);
+    
+    try {
+        // Get blob directly using a Promise wrapper
+        const blob = await new Promise((resolve) => {
+            canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9);
+        });
+        
+        if (!blob) {
+            console.error('Failed to create blob from canvas');
+            requestAnimationFrame(detectWebcam);
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', blob, 'webcam.jpg');
+        formData.append('confidence', document.getElementById('confidenceRange').value);
+        
+        const response = await fetch('/api/detect_webcam', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            const detectionData = JSON.parse(response.headers.get('X-Detections'));
+            triggerAlert(detectionData.has_detections);
+            
+            const blob = await response.blob();
+            const imgUrl = URL.createObjectURL(blob);
+            const img = new Image();
+            
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0);
+                
+                // If detection found, add to gallery
+                if (detectionData.has_detections) {
+                    const container = document.createElement('div');
+                    const detectedImg = document.createElement('img');
+                    const timestamp = document.createElement('div');
+                    
+                    detectedImg.src = imgUrl;
+                    timestamp.className = 'detection-timestamp';
+                    timestamp.textContent = new Date().toLocaleTimeString();
+                    
+                    container.appendChild(detectedImg);
+                    container.appendChild(timestamp);
+                    gallery.insertBefore(container, gallery.firstChild);
+                    
+                    // Keep only last 10 detections
+                    if (gallery.children.length > 10) {
+                        gallery.removeChild(gallery.lastChild);
+                    }
+                } else {
+                    URL.revokeObjectURL(imgUrl);
+                }
+                
+                // Continue detection if webcam is still active
+                if (isWebcamActive) {
+                    requestAnimationFrame(detectWebcam);
+                }
+            };
+            img.src = imgUrl;
+        }
+    } catch (error) {
+        console.error('Error during webcam detection:', error);
+        if (isWebcamActive) {
+            setTimeout(detectWebcam, 1000);
+        }
+    }
 }
 

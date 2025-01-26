@@ -192,6 +192,16 @@ def detect_webcam():
         results = get_model()(image_np, conf=confidence_threshold)
         plot = results[0].plot()
         
+        # Get detections
+        has_detections = len(results[0].boxes) > 0
+        detections = []
+        if has_detections:
+            for box in results[0].boxes:
+                confidence = box.conf.item()
+                detections.append({
+                    'confidence': float(confidence)
+                })
+        
         # Convert numpy array to PIL Image
         plot_image = Image.fromarray(plot)
         
@@ -200,12 +210,21 @@ def detect_webcam():
         plot_image.save(img_byte_arr, format='JPEG')
         img_byte_arr.seek(0)
         
-        return send_file(
+        # Return both the image and detection data
+        response = make_response(send_file(
             img_byte_arr,
             mimetype='image/jpeg',
             as_attachment=True,
             download_name='webcam_detected.jpg'
-        )
+        ))
+        
+        # Add detection data to headers
+        response.headers['X-Detections'] = json.dumps({
+            'has_detections': has_detections,
+            'detections': detections
+        })
+        
+        return response
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500
