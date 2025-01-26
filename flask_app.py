@@ -172,8 +172,7 @@ def detect_objects():
            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    finally:
-        os.unlink(output_video_path)
+
 
 @app.route('/api/detect_webcam', methods=['POST'])
 def detect_webcam():
