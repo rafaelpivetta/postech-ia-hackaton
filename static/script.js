@@ -1,157 +1,79 @@
-// Update confidence value display
-document.getElementById('confidence').addEventListener('input', function(e) {
-    document.getElementById('confidenceValue').textContent = e.target.value;
-});
+function showConfidenceSliderAndUploadCard() {
+    const confidenceSlider = document.getElementById('confidenceSlider');
+    const uploadCard = document.getElementById('uploadCard');
+    
+    clearAlerts();
+    clearFileInputAndPreviews();
+    
+    confidenceSlider.addEventListener('input', function(e) {
+        document.getElementById('confidenceRangeValue').textContent = e.target.value;
+        clearAlerts();
 
-// Preview uploaded file
-document.getElementById('fileInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    const preview = document.getElementById('originalPreview');
-    preview.innerHTML = '';
+        const fileInput = document.getElementById('fileUpload');
 
-    if (file) {
-        if (file.type.startsWith('image/')) {
-            const img = document.createElement('img');
-            img.src = URL.createObjectURL(file);
-            preview.appendChild(img);
-        } else if (file.type.startsWith('video/')) {
-            const video = document.createElement('video');
-            video.src = URL.createObjectURL(file);
-            video.controls = true;
-            preview.appendChild(video);
-        }
-    }
-});
-
-let mediaStream = null;
-let isWebcamActive = false;
-let detectionInterval = null;
-
-async function startWebcam() {
-    const video = document.getElementById('webcamVideo');
-    const startButton = document.getElementById('startWebcam');
-    const stopButton = document.getElementById('stopWebcam');
-
-    try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
-                width: { ideal: 640 },
-                height: { ideal: 480 }
-            } 
-        });
-        video.srcObject = mediaStream;
-        video.style.display = 'block';
-        isWebcamActive = true;
-        startButton.style.display = 'none';
-        stopButton.style.display = 'inline-block';
         
-        // Start detection loop
-        startWebcamDetection();
-    } catch (err) {
-        console.error("Error accessing webcam:", err);
-        alert("Error accessing webcam: " + err.message);
-    }
+        if (fileInput.files.length > 0) {
+            detectObjects();
+        }
+    });
+    confidenceSlider.style.display = 'block';
+    uploadCard.style.display = 'block';
+
+    document.getElementById('fileUpload').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+          
+        if (file) {
+            detectObjects();
+        }
+    });
 }
 
-function stopWebcam() {
-    const video = document.getElementById('webcamVideo');
-    const startButton = document.getElementById('startWebcam');
-    const stopButton = document.getElementById('stopWebcam');
-    const canvas = document.getElementById('webcamCanvas');
-
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-    }
-
-    if (detectionInterval) {
-        clearInterval(detectionInterval);
-        detectionInterval = null;
-    }
-
-    video.style.display = 'none';
-    canvas.style.display = 'none';
-    isWebcamActive = false;
-    startButton.style.display = 'inline-block';
-    stopButton.style.display = 'none';
-}
-
-async function startWebcamDetection() {
-    const video = document.getElementById('webcamVideo');
-    const canvas = document.getElementById('webcamCanvas');
-    const ctx = canvas.getContext('2d');
-    const confidenceThreshold = document.getElementById('confidence').value;
-
-    canvas.style.display = 'block';
-
-    detectionInterval = setInterval(async () => {
-        if (!isWebcamActive) return;
-
-        // Set canvas dimensions to match video
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        // Draw current video frame to canvas
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // Get canvas data as blob
-        canvas.toBlob(async (blob) => {
-            const formData = new FormData();
-            formData.append('file', blob, 'webcam.jpg');
-            formData.append('confidence', confidenceThreshold);
-
-            try {
-                const response = await fetch('/api/detect_webcam', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) throw new Error('Detection failed');
-
-                const result = await response.blob();
-                const imgUrl = URL.createObjectURL(result);
-                const img = new Image();
-                img.onload = () => {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    URL.revokeObjectURL(imgUrl);
-                };
-                img.src = imgUrl;
-            } catch (error) {
-                console.error('Error during webcam detection:', error);
-            }
-        }, 'image/jpeg');
-    }, 100); // Adjust interval as needed (currently 100ms)
-}
-
-// Add event listeners for webcam buttons
-document.getElementById('startWebcam').addEventListener('click', startWebcam);
-document.getElementById('stopWebcam').addEventListener('click', stopWebcam);
-
-function updateAlertVisibility(hasDetections) {
-    const alertDiv = document.getElementById('alert');
+function triggerAlert(hasDetections) {
+    
     if (hasDetections) {
-        alertDiv.classList.remove('d-none');
+        document.getElementById('detectedObjectsAlert').classList.remove('d-none');
+        document.getElementById('noDetectionsAlert').classList.add('d-none');
     } else {
-        alertDiv.classList.add('d-none');
+        document.getElementById('noDetectionsAlert').classList.remove('d-none');
+        document.getElementById('detectedObjectsAlert').classList.add('d-none');
     }
+}
+
+function clearAlerts() {
+    document.getElementById('detectedObjectsAlert').classList.add('d-none');
+    document.getElementById('noDetectionsAlert').classList.add('d-none');
+}
+
+function clearFileInputAndPreviews() {
+    const fileInput = document.getElementById('fileUpload');
+    fileInput.value = '';
+
+    const processedImage = document.getElementById('processedImage');
+    const processedVideo = document.getElementById('processedVideo');
+    processedImage.style.display = 'none';
+    processedVideo.style.display = 'none';
 }
 
 // Modify your existing detectObjects function
 async function detectObjects() {
-    document.getElementById('alert').classList.add('d-none');
-    const fileInput = document.getElementById('fileInput');
+
+    console.log('---detectObjects---');
+    console.log(document.getElementById('fileUpload').value);
+    document.getElementById('loadingIndicator').classList.remove('d-none');
+    document.getElementById('uploadCardBody').classList.add('d-none');
+    
+    // Clear any existing alerts while processing
+    clearAlerts();
+    const fileInput = document.getElementById('fileUpload');
     const file = fileInput.files[0];
     if (!file) {
-        alert('Please select a file first');
+        alert('Por favor, selecione um arquivo primeiro');
         return;
     }
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('confidence', document.getElementById('confidence').value);
-
-    document.getElementById('loading').style.display = 'block';
+    formData.append('confidence', document.getElementById('confidenceRange').value);
 
     try {
         const response = await fetch('/api/detect', {
@@ -159,26 +81,46 @@ async function detectObjects() {
             body: formData
         });
 
+        document.getElementById('loadingIndicator').classList.add('d-none');
+        document.getElementById('uploadCardBody').classList.remove('d-none');
         if (!response.ok) throw new Error('Network response was not ok');
 
         // Get detection data from headers
         const detectionData = JSON.parse(response.headers.get('X-Detections'));
         
         // Update alert visibility based on detections
-        updateAlertVisibility(detectionData.has_detections);
+        triggerAlert(detectionData.has_detections);
 
-        // Handle the image response
-        const blob = await response.blob();
-        const imageUrl = URL.createObjectURL(blob);
+        const processedImage = document.getElementById('processedImage');
+        const processedVideo = document.getElementById('processedVideo');
         
-        // Update the preview
-        document.getElementById('resultPreview').innerHTML = 
-            `<img src="${imageUrl}" alt="Detected Objects">`;
+        processedImage.style.display = 'none';
+        processedVideo.style.display = 'none';
+
+        const blob = await response.blob();
+
+        if (file.type.startsWith('image/')) {
+            processedImage.src = URL.createObjectURL(blob);
+            processedImage.style.display = 'block';
+        } 
+        else if (file.type.startsWith('video/')) {
+
+            // Create download link for video
+            const downloadLink = document.createElement('a');
+            downloadLink.href = URL.createObjectURL(blob);
+            downloadLink.download = 'detected_video.mp4';
+            downloadLink.className = 'btn btn-primary mt-3';
+            downloadLink.innerHTML = 'Baixar Video Processado';
+
+            // Add download button after video
+            processedVideo.parentNode.insertBefore(downloadLink, processedVideo.nextSibling);
+
+        }
+  
 
     } catch (error) {
         console.error('Error:', error);
         alert('Error processing the file');
-    } finally {
-        document.getElementById('loading').style.display = 'none';
-    }
+    } 
 }
+
