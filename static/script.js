@@ -8,11 +8,21 @@ function showConfidenceSliderAndUploadCard() {
     const uploadCard = document.getElementById('uploadCard');
     const webcamCard = document.getElementById('webcamCard');
     const notificationsCard = document.getElementById('notificationsCard');
+    const downloadLink = document.getElementById('downloadLink');
+
+    if (downloadLink) {
+        downloadLink.remove();
+    }
+
+    let slider = document.querySelector("input[type='range']");
+    slider.value = "0.25";
     
     clearAlerts();
     clearFileInputAndPreviews();
     stopWebcam(); // Stop webcam if running
-    
+   
+    document.getElementById('confidenceRangeValue').textContent = 0.25; 
+
     confidenceSlider.addEventListener('input', function(e) {
         document.getElementById('confidenceRangeValue').textContent = e.target.value;
         clearAlerts();
@@ -101,6 +111,7 @@ async function sendAlert() {
 function clearAlerts() {
     document.getElementById('detectedObjectsAlert').classList.add('d-none');
     document.getElementById('noDetectionsAlert').classList.add('d-none');
+    document.getElementById('notificationSentAlert').classList.add('d-none');
 }
 
 function clearFileInputAndPreviews() {
@@ -166,6 +177,7 @@ async function detectObjects() {
 
             // Create download link for video
             const downloadLink = document.createElement('a');
+            downloadLink.id = 'downloadLink';
             downloadLink.href = URL.createObjectURL(blob);
             downloadLink.download = 'detected_video.mp4';
             downloadLink.className = 'btn btn-primary mt-3';
