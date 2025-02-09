@@ -141,6 +141,15 @@ async function detectObjects() {
         return;
     }
 
+    // Check file size (limit to 5 MB)
+    const fileSizeLimit = 5 * 1024 * 1024; // 5 MB in bytes
+    if (file.size > fileSizeLimit) {
+        alert('O arquivo excede o limite de tamanho de 5 MB');
+        document.getElementById('loadingIndicator').classList.add('d-none');
+        document.getElementById('uploadCardBody').classList.remove('d-none');
+        return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('confidence', document.getElementById('confidenceRange').value);
