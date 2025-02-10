@@ -16,7 +16,7 @@ from alertEmailNotification import send_email_notification
 from alertTextToSpeechNotification import send_tts_notification
 from alertSoundNotification import send_sound_alert_notification
 import tempfile
-
+from Rastrear import *
 
 # Load environment variables
 load_dotenv()
@@ -186,62 +186,86 @@ def detect_objects():
            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
+    
+tracked_ids = set()
 
 @app.route('/api/detect_webcam', methods=['POST'])
-def detect_webcam():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
-    
-    file = request.files['file']
-    confidence_threshold = float(request.form.get('confidence', 0.25))
-    
-    try:
-        # Read image from request
-        image = Image.open(file)
-        image_np = np.array(image)
-        
-        # Run inference
-        results = get_model()(image_np, conf=confidence_threshold)
-        plot = results[0].plot()
-        
-        # Get detections
-        has_detections = len(results[0].boxes) > 0
-        detections = []
-        if has_detections:
-            for box in results[0].boxes:
-                confidence = box.conf.item()
-                detections.append({
-                    'confidence': float(confidence)
-                })
-        
-        # Convert numpy array to PIL Image
-        plot_image = Image.fromarray(plot)
-        
-        # Save to bytes
-        img_byte_arr = io.BytesIO()
-        plot_image.save(img_byte_arr, format='JPEG')
-        img_byte_arr.seek(0)
-        
-        # Return both the image and detection data
-        response = make_response(send_file(
-            img_byte_arr,
-            mimetype='image/jpeg',
-            as_attachment=True,
-            download_name='webcam_detected.jpg'
-        ))
-        
-        # Add detection data to headers
-        response.headers['X-Detections'] = json.dumps({
-            'has_detections': has_detections,
-            'detections': detections
-        })
-        
-        return response
-            
-    except Exception as e:
+# Conjunto global para armazenar os IDs dos objetos rastreados
+
+
+def detect_webcam():  
+    if 'file' not in request.files:  
+        return jsonify({'error': 'No file provided'}), 400  
+
+    file = request.files['file']  
+    confidence_threshold = float(request.form.get('confidence', 0.25))  
+
+    try:  
+        # Read image from request  
+        image = Image.open(file)  
+        image_np = np.array(image)  
+
+        # Run inference  
+        results = get_model()(image_np, conf=confidence_threshold)  
+        plot = results[0].plot()  
+
+        # Get detections and track knives  
+        has_detections, detections, trackers = ProcessarWEBCAM(results[0].boxes, confidence_threshold, image_np)  
+
+        # Convert numpy array to PIL Image  
+        plot_image = Image.fromarray(plot)  
+
+        # Drawing bounding boxes with IDs on the plot
+        for idx, detection in enumerate(detections):
+            box = detection['box']  # Assuming box is in [x_min, y_min, x_max, y_max]
+            detection_id = detection['id']  # Assuming each detection has a unique 'id'
+
+            # Check if the ID is new
+            if detection_id not in tracked_ids:
+                # New ID found, send notification and add to tracked set
+                tracked_ids.add(detection_id)
+                # Aqui você pode chamar a função para enviar a notificação (ex: enviar_notificacao(detection_id))
+
+                # Exemplo de envio de notificação
+                print(f"Novo objeto detectado com ID: {detection_id}")
+
+            # Label to display on the bounding box
+            label = f"ID: {detection_id}"
+
+            # Draw the box and the ID
+            plot_image = Desenhar(plot_image, box, label)
+
+        # Save to bytes  
+        img_byte_arr = io.BytesIO()  
+        plot_image.save(img_byte_arr, format='JPEG')  
+        img_byte_arr.seek(0)  
+
+        # Create directory for detected knives  
+        #knife_dir = criar_pasta_para_facas()  
+
+        # Save detected knives  
+        #Guardar_facas_detectadas(detections, knife_dir, image_np)  
+
+        # Return both the image and detection data  
+        response = make_response(send_file(  
+            img_byte_arr,  
+            mimetype='image/jpeg',  
+            as_attachment=True,  
+            download_name='webcam_detected.jpg'  
+        ))  
+
+        # Add detection data to headers  
+        response.headers['X-Detections'] = json.dumps({  
+            'has_detections': has_detections,  
+            'detections': detections,
+            'ObjectID': [detection['id'] for detection in detections]
+        })  
+
+        return response  
+
+    except Exception as e:  
         return jsonify({'error': str(e)}), 500
-    
+
 
 @app.route('/api/send_notification', methods=['POST'])
 def send_notification():

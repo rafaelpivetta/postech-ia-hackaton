@@ -1,6 +1,7 @@
 // Add these variables at the top
 let webcamStream = null;
 let isWebcamActive = false;
+const Objetos = new Set();
 
 function showConfidenceSliderAndUploadCard() {
     const mode = document.getElementById('detectionMode').value;
@@ -322,7 +323,20 @@ async function detectWebcam() {
         
         if (response.ok) {
             const detectionData = JSON.parse(response.headers.get('X-Detections'));
-            triggerAlert(detectionData.has_detections);
+            //console.log('Detection data:', detectionData.detections);
+            
+            let newDetections = false;
+            
+            detectionData.detections.forEach(detection => {
+                if (!Objetos.has(detection.id)) {
+                    Objetos.add(detection.id);
+                    newDetections = true;
+                }
+            });
+            
+            if (newDetections) {
+                triggerAlert(detectionData.has_detections);
+            }
             
             const blob = await response.blob();
             const imgUrl = URL.createObjectURL(blob);
@@ -340,11 +354,13 @@ async function detectWebcam() {
                     detectedImg.src = imgUrl;
                     timestamp.className = 'detection-timestamp';
                     timestamp.textContent = new Date().toLocaleTimeString();
-                    
+
+                    if (newDetections) { 
                     container.appendChild(detectedImg);
                     container.appendChild(timestamp);
                     gallery.insertBefore(container, gallery.firstChild);
-                    
+                    }
+
                     // Keep only last 10 detections
                     if (gallery.children.length > 10) {
                         gallery.removeChild(gallery.lastChild);
