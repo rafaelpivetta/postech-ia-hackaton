@@ -10,13 +10,11 @@ import cv2
 from tempfile import NamedTemporaryFile
 import io
 import json
-from alertPushNotification import send_wirepusher_notification
 from alertSMSNotification import send_twilio_sms_notification
 from alertEmailNotification import send_email_notification
-from alertTextToSpeechNotification import send_tts_notification
-from alertSoundNotification import send_sound_alert_notification
 import tempfile
-
+from Rastrear import *
+import base64
 
 # Load environment variables
 load_dotenv()
@@ -80,6 +78,8 @@ def process_video(file, confidence_threshold):
 
         has_detections = False
         detections = []
+
+        first_detection_frame = None
         
         while cap.isOpened():
             ret, frame = cap.read()
@@ -97,6 +97,10 @@ def process_video(file, confidence_threshold):
                     detections.append({
                         'confidence': float(box.conf.item())
                     })
+
+                # Save first frame with detections
+                if first_detection_frame is None:
+                    first_detection_frame = annotated_frame.copy()
             
             # Write frame
             out.write(annotated_frame)
@@ -105,7 +109,7 @@ def process_video(file, confidence_threshold):
         cap.release()
         out.release()
         
-        return temp_output_path, has_detections, detections
+        return temp_output_path, has_detections, detections, first_detection_frame
         
     except Exception as e:
         # Clean up temp files in case of error
@@ -128,7 +132,7 @@ def detect_objects():
         
         if file.filename.lower().endswith(('.mp4', '.avi', '.mov')):
             
-            output_video_path, has_detections, detections = process_video(file, confidence_threshold)
+            output_video_path, has_detections, detections, first_detection_frame = process_video(file, confidence_threshold)
             
             # Return video file
             response = make_response(send_file(
@@ -142,6 +146,21 @@ def detect_objects():
                 'has_detections': has_detections,
                 'detections': detections
             })
+            
+            if first_detection_frame is not None:
+                # Convert frame to PIL Image
+                frame_image = Image.fromarray(cv2.cvtColor(first_detection_frame, cv2.COLOR_BGR2RGB))
+                
+                # Save to bytes
+                img_byte_arr = io.BytesIO()
+                frame_image.save(img_byte_arr, format='JPEG')
+                img_byte_arr.seek(0)
+                
+                # Add image to response
+                img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+                response.headers['X-Detection-Image'] = json.dumps({
+                    'image': img_base64
+                })
             
             return response
         else:
@@ -186,80 +205,96 @@ def detect_objects():
            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
+    
+tracked_ids = set()
 
 @app.route('/api/detect_webcam', methods=['POST'])
-def detect_webcam():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
-    
-    file = request.files['file']
-    confidence_threshold = float(request.form.get('confidence', 0.25))
-    
-    try:
-        # Read image from request
-        image = Image.open(file)
-        image_np = np.array(image)
-        
-        # Run inference
-        results = get_model()(image_np, conf=confidence_threshold)
-        plot = results[0].plot()
-        
-        # Get detections
-        has_detections = len(results[0].boxes) > 0
-        detections = []
-        if has_detections:
-            for box in results[0].boxes:
-                confidence = box.conf.item()
-                detections.append({
-                    'confidence': float(confidence)
-                })
-        
-        # Convert numpy array to PIL Image
-        plot_image = Image.fromarray(plot)
-        
-        # Save to bytes
-        img_byte_arr = io.BytesIO()
-        plot_image.save(img_byte_arr, format='JPEG')
-        img_byte_arr.seek(0)
-        
-        # Return both the image and detection data
-        response = make_response(send_file(
-            img_byte_arr,
-            mimetype='image/jpeg',
-            as_attachment=True,
-            download_name='webcam_detected.jpg'
-        ))
-        
-        # Add detection data to headers
-        response.headers['X-Detections'] = json.dumps({
-            'has_detections': has_detections,
-            'detections': detections
-        })
-        
-        return response
-            
-    except Exception as e:
+# Conjunto global para armazenar os IDs dos objetos rastreados
+
+
+def detect_webcam():  
+    if 'file' not in request.files:  
+        return jsonify({'error': 'No file provided'}), 400  
+
+    file = request.files['file']  
+    confidence_threshold = float(request.form.get('confidence', 0.25))  
+
+    try:  
+        # Read image from request  
+        image = Image.open(file)  
+        image_np = np.array(image)  
+
+        # Run inference  
+        results = get_model()(image_np, conf=confidence_threshold)  
+        plot = results[0].plot()  
+
+        # Get detections and track knives  
+        has_detections, detections, trackers = ProcessarWEBCAM(results[0].boxes, confidence_threshold, image_np)  
+
+        # Convert numpy array to PIL Image  
+        plot_image = Image.fromarray(plot)  
+
+        # Drawing bounding boxes with IDs on the plot
+        for idx, detection in enumerate(detections):
+            box = detection['box']  # Assuming box is in [x_min, y_min, x_max, y_max]
+            detection_id = detection['id']  # Assuming each detection has a unique 'id'
+
+            # Check if the ID is new
+            if detection_id not in tracked_ids:
+                # New ID found, send notification and add to tracked set
+                tracked_ids.add(detection_id)
+                # Aqui você pode chamar a função para enviar a notificação (ex: enviar_notificacao(detection_id))
+
+                # Exemplo de envio de notificação
+                print(f"Novo objeto detectado com ID: {detection_id}")
+
+            # Label to display on the bounding box
+            label = f"ID: {detection_id}"
+
+            # Draw the box and the ID
+            plot_image = Desenhar(plot_image, box, label)
+
+        # Save to bytes  
+        img_byte_arr = io.BytesIO()  
+        plot_image.save(img_byte_arr, format='JPEG')  
+        img_byte_arr.seek(0)  
+
+        # Create directory for detected knives  
+        #knife_dir = criar_pasta_para_facas()  
+
+        # Save detected knives  
+        #Guardar_facas_detectadas(detections, knife_dir, image_np)  
+
+        # Return both the image and detection data  
+        response = make_response(send_file(  
+            img_byte_arr,  
+            mimetype='image/jpeg',  
+            as_attachment=True,  
+            download_name='webcam_detected.jpg'  
+        ))  
+
+        # Add detection data to headers  
+        response.headers['X-Detections'] = json.dumps({  
+            'has_detections': has_detections,  
+            'detections': detections,
+            'ObjectID': [detection['id'] for detection in detections]
+        })  
+
+        return response  
+
+    except Exception as e:  
         return jsonify({'error': str(e)}), 500
-    
+
 
 @app.route('/api/send_notification', methods=['POST'])
 def send_notification():
     data = request.json
     detection_mode = data.get('detection_mode')  # (imagem, vídeo ou webcam)
     notification_type = data.get('notification_type')  # Tipo de notificação (push, por exemplo)
-    device_id = data.get('device_id')  # ID do dispositivo para WirePusher
     sms_number = data.get('sms_number')  # Número de telefone para SMS
     email_address = data.get('email_address')  # Endereço de e-mail para notificação por e-mail
-    tts_message = data.get('tts_message')  # Mensagem para notificação por Text to Speech
-    sound_alert_file = data.get('sound_alert_file')
-    # Arquivo de som para notificação por Aviso Sonoro
+    image_base64 = data.get('image_base64')  # Imagem em base64 para notificação por e-mail
     
-    # Verifica se o campo 'tts_message' está vazio e, se sim, preenche com uma mensagem padrão
-    if not tts_message:
-        tts_message = f"Alerta: Objeto cortante detectado!!! Origem: {detection_mode}"
-
-
     if notification_type == 'sms' and sms_number:
         try:
             send_twilio_sms_notification(sms_number, detection_mode)
@@ -267,34 +302,13 @@ def send_notification():
         except Exception as e:
             return jsonify({"status": "error", "message": f"Falha ao enviar o SMS: {str(e)}"}), 500
     
-    elif notification_type == 'push' and device_id:
-        try:
-            send_wirepusher_notification(device_id, detection_mode)
-            return jsonify({"status": "success", "message": "Notificação enviada com sucesso."}), 200
-        except Exception as e:
-            return jsonify({"status": "error", "message": f"Falha ao enviar a notificação: {str(e)}"}), 500
-        
     elif notification_type == 'email' and email_address:
         try:
-            send_email_notification(email_address, detection_mode)
-            return jsonify({"status": "success", "message": "Notificação enviada com sucesso."}), 200
+            send_email_notification(email_address, detection_mode, image_base64)
+            return jsonify({"status": "success", "message": "E-mail enviado com sucesso."}), 200
         except Exception as e:
             return jsonify({"status": "error", "message": f"Falha ao enviar a notificação: {str(e)}"}), 500
         
-    elif notification_type == 'textToSpeech' and tts_message:
-        try:
-            send_tts_notification(tts_message = tts_message, detection_mode=detection_mode)
-            return jsonify({"status": "success", "message": "Notificação enviada com sucesso."}), 200
-        except Exception as e:
-            return jsonify({"status": "error", "message": f"Falha ao enviar a notificação: {str(e)}"}), 500
-        
-    elif notification_type == 'soundAlert' and sound_alert_file:
-        try:
-            send_sound_alert_notification(sound_alert_file, detection_mode)
-            return jsonify({"status": "success", "message": "Notificação enviada com sucesso."}), 200
-        except Exception as e:
-            return jsonify({"status": "error", "message": f"Falha ao enviar a notificação: {str(e)}"}), 500
-    
     else:
         return jsonify({"status": "error", "message": "Dados inválidos ou faltando."}), 400
 

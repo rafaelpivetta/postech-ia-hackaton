@@ -1,6 +1,7 @@
 // Add these variables at the top
 let webcamStream = null;
 let isWebcamActive = false;
+const Objetos = new Set();
 
 function showConfidenceSliderAndUploadCard() {
     const mode = document.getElementById('detectionMode').value;
@@ -55,7 +56,7 @@ function showConfidenceSliderAndUploadCard() {
     });
 }
 
-function triggerAlert(hasDetections) {
+function triggerAlert(hasDetections, image_base64) {
     
     if (hasDetections) {
         document.getElementById('detectedObjectsAlert').classList.remove('d-none');
@@ -63,50 +64,29 @@ function triggerAlert(hasDetections) {
 
         const notificationType = document.querySelector('input[name="notificationType"]:checked')?.value;
         if (notificationType !== 'none' && notificationType !== undefined) {
-            sendAlert();
+            sendAlert(image_base64);
         }
     } else {
         document.getElementById('noDetectionsAlert').classList.remove('d-none');
         document.getElementById('detectedObjectsAlert').classList.add('d-none');
     }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        const notificationAlert = document.getElementById("notificationSentAlert");
     
-        // Função para esconder o alerta
-        function hideNotificationAlert() {
-            notificationAlert.classList.add("d-none");
-        }
-    
-        // Adiciona eventos para esconder o alerta quando houver interação
-        document.getElementById('deviceId')?.addEventListener('input', hideNotificationAlert);
-        document.getElementById('detectionMode')?.addEventListener('change', hideNotificationAlert);
-        document.getElementById('phoneNumber')?.addEventListener('input', hideNotificationAlert);
-        document.querySelectorAll('input[name="notificationType"]').forEach(input => {
-            input.addEventListener('change', hideNotificationAlert);
-        });
-    });
 }
 
-async function sendAlert() {
+async function sendAlert(image_base64) {
     console.log('---sendAlert---');
 
     const detectionMode = document.getElementById('detectionMode').value;
     const notificationType = document.querySelector('input[name="notificationType"]:checked')?.value;
-    const deviceId = document.getElementById('deviceId').value;
-    const smsNumber = document.getElementById('smsNumber').value;
+    const smsNumber = "+55" + document.getElementById('smsNumber').value;
     const emailAddress = document.getElementById('emailAddress').value;
-    const ttsMessage = document.getElementById('ttsMessage').value;
-    const soundAlertFile = document.getElementById('soundAlertFile').value;
 
     const data = {
         detection_mode: detectionMode,
         notification_type: notificationType,
-        device_id: deviceId,
         sms_number: smsNumber,
         email_address: emailAddress,
-        tts_message: ttsMessage,
-        sound_alert_file: soundAlertFile
+        image_base64: image_base64
     };
 
     try {
@@ -125,6 +105,13 @@ async function sendAlert() {
         
     } catch (error) {
         console.error('Error:', error);
+    }
+}
+
+function clearNotificationSentAlert() {
+    const notificationAlert = document.getElementById('notificationSentAlert');
+    if (notificationAlert) {
+        notificationAlert.classList.add('d-none');
     }
 }
 
@@ -186,17 +173,35 @@ async function detectObjects() {
 
         // Get detection data from headers
         const detectionData = JSON.parse(response.headers.get('X-Detections'));
-        
+
+        const blob = await response.blob();
+
+        let image_base64 = null;
+
+        if (file.type.startsWith('image/')) {
+            image_base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        if (file.type.startsWith('video/')) {
+            const imageDetection = JSON.parse(response.headers.get('X-Detection-Image'));
+            if (imageDetection) {
+                image_base64 = imageDetection.image;
+            }
+        }
+
         // Update alert visibility based on detections
-        triggerAlert(detectionData.has_detections);
+        triggerAlert(detectionData.has_detections, image_base64);
 
         const processedImage = document.getElementById('processedImage');
         const processedVideo = document.getElementById('processedVideo');
         
         processedImage.style.display = 'none';
         processedVideo.style.display = 'none';
-
-        const blob = await response.blob();
 
         if (file.type.startsWith('image/')) {
             processedImage.src = URL.createObjectURL(blob);
@@ -322,9 +327,29 @@ async function detectWebcam() {
         
         if (response.ok) {
             const detectionData = JSON.parse(response.headers.get('X-Detections'));
-            triggerAlert(detectionData.has_detections);
+            //console.log('Detection data:', detectionData.detections);
+            
+            let newDetections = false;
+            
+            detectionData.detections.forEach(detection => {
+                if (!Objetos.has(detection.id)) {
+                    Objetos.add(detection.id);
+                    newDetections = true;
+                }
+            });
             
             const blob = await response.blob();
+
+            if (newDetections) {
+                const image_base64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+                triggerAlert(detectionData.has_detections, image_base64);
+            }
+
             const imgUrl = URL.createObjectURL(blob);
             const img = new Image();
             
@@ -340,11 +365,13 @@ async function detectWebcam() {
                     detectedImg.src = imgUrl;
                     timestamp.className = 'detection-timestamp';
                     timestamp.textContent = new Date().toLocaleTimeString();
-                    
-                    container.appendChild(detectedImg);
-                    container.appendChild(timestamp);
-                    gallery.insertBefore(container, gallery.firstChild);
-                    
+
+                    if (newDetections) { 
+                        container.appendChild(detectedImg);
+                        container.appendChild(timestamp);
+                        gallery.insertBefore(container, gallery.firstChild);
+                    }
+
                     // Keep only last 10 detections
                     if (gallery.children.length > 10) {
                         gallery.removeChild(gallery.lastChild);
