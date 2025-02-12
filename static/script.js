@@ -9,11 +9,6 @@ function showConfidenceSliderAndUploadCard() {
     const uploadCard = document.getElementById('uploadCard');
     const webcamCard = document.getElementById('webcamCard');
     const notificationsCard = document.getElementById('notificationsCard');
-    const downloadLink = document.getElementById('downloadLink');
-
-    if (downloadLink) {
-        downloadLink.remove();
-    }
 
     let slider = document.querySelector("input[type='range']");
     slider.value = "0.25";
@@ -27,13 +22,7 @@ function showConfidenceSliderAndUploadCard() {
     confidenceSlider.addEventListener('input', function(e) {
         document.getElementById('confidenceRangeValue').textContent = e.target.value;
         clearAlerts();
-
-        const fileInput = document.getElementById('fileUpload');
-
-        
-        if (fileInput.files.length > 0) {
-            detectObjects();
-        }
+        clearFileInputAndPreviews();
     });
     confidenceSlider.style.display = 'block';
     notificationsCard.style.display = 'block';
@@ -48,6 +37,8 @@ function showConfidenceSliderAndUploadCard() {
     }
 
     document.getElementById('fileUpload').addEventListener('change', function(event) {
+        clearAlerts();
+        clearPreviews();
         const file = event.target.files[0];
           
         if (file) {
@@ -56,7 +47,7 @@ function showConfidenceSliderAndUploadCard() {
     });
 }
 
-function triggerAlert(hasDetections, image_base64) {
+function triggerAlert(hasDetections, image_base64, detection_mode) {
     
     if (hasDetections) {
         document.getElementById('detectedObjectsAlert').classList.remove('d-none');
@@ -64,7 +55,7 @@ function triggerAlert(hasDetections, image_base64) {
 
         const notificationType = document.querySelector('input[name="notificationType"]:checked')?.value;
         if (notificationType !== 'none' && notificationType !== undefined) {
-            sendAlert(image_base64);
+            sendAlert(image_base64, detection_mode);
         }
     } else {
         document.getElementById('noDetectionsAlert').classList.remove('d-none');
@@ -73,16 +64,14 @@ function triggerAlert(hasDetections, image_base64) {
     
 }
 
-async function sendAlert(image_base64) {
-    console.log('---sendAlert---');
+async function sendAlert(image_base64, detection_mode) {
 
-    const detectionMode = document.getElementById('detectionMode').value;
     const notificationType = document.querySelector('input[name="notificationType"]:checked')?.value;
     const smsNumber = "+55" + document.getElementById('smsNumber').value;
     const emailAddress = document.getElementById('emailAddress').value;
 
     const data = {
-        detection_mode: detectionMode,
+        detection_mode: detection_mode,
         notification_type: notificationType,
         sms_number: smsNumber,
         email_address: emailAddress,
@@ -101,7 +90,6 @@ async function sendAlert(image_base64) {
         // Lógica para processar a resposta, se necessário
         const result = await response.json();
         document.getElementById("notificationSentAlert").classList.remove("d-none");
-        console.log('Notification sent successfully:', result);
         
     } catch (error) {
         console.error('Error:', error);
@@ -125,17 +113,25 @@ function clearFileInputAndPreviews() {
     const fileInput = document.getElementById('fileUpload');
     fileInput.value = '';
 
+    clearPreviews();
+}
+
+function clearPreviews() {
     const processedImage = document.getElementById('processedImage');
     const processedVideo = document.getElementById('processedVideo');
     processedImage.style.display = 'none';
     processedVideo.style.display = 'none';
+
+    const downloadLink = document.getElementById('downloadLink');
+
+    if (downloadLink) {
+        downloadLink.remove();
+    }
 }
 
 // Modify your existing detectObjects function
 async function detectObjects() {
 
-    console.log('---detectObjects---');
-    console.log(document.getElementById('fileUpload').value);
     document.getElementById('loadingIndicator').classList.remove('d-none');
     document.getElementById('uploadCardBody').classList.add('d-none');
     
@@ -177,6 +173,7 @@ async function detectObjects() {
         const blob = await response.blob();
 
         let image_base64 = null;
+        let detection_mode = "Imagem"
 
         if (file.type.startsWith('image/')) {
             image_base64 = await new Promise((resolve, reject) => {
@@ -192,10 +189,11 @@ async function detectObjects() {
             if (imageDetection) {
                 image_base64 = imageDetection.image;
             }
+            detection_mode = "Vídeo"
         }
 
         // Update alert visibility based on detections
-        triggerAlert(detectionData.has_detections, image_base64);
+        triggerAlert(detectionData.has_detections, image_base64, detection_mode);
 
         const processedImage = document.getElementById('processedImage');
         const processedVideo = document.getElementById('processedVideo');
@@ -327,7 +325,6 @@ async function detectWebcam() {
         
         if (response.ok) {
             const detectionData = JSON.parse(response.headers.get('X-Detections'));
-            //console.log('Detection data:', detectionData.detections);
             
             let newDetections = false;
             
@@ -347,7 +344,7 @@ async function detectWebcam() {
                     reader.onerror = reject;
                     reader.readAsDataURL(blob);
                 });
-                triggerAlert(detectionData.has_detections, image_base64);
+                triggerAlert(detectionData.has_detections, image_base64, "Webcam");
             }
 
             const imgUrl = URL.createObjectURL(blob);
